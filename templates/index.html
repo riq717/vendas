@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Controle de Vendas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Marketplace</p>
+          <h1>Controle de vendas</h1>
+        </div>
+        <button class="primary" @click="exportCsv">Exportar CSV</button>
+      </header>
+
+      <main class="container">
+        <section class="panel form-panel">
+          <h2>{{ editId ? 'Editar venda' : 'Nova venda' }}</h2>
+
+          <form @submit.prevent="salvarVenda">
+            <div class="grid two-columns">
+              <label>
+                <span>Produto</span>
+                <input v-model="form.produto" type="text" placeholder="Ex: Camiseta Premium" required />
+              </label>
+
+              <label>
+                <span>Preço</span>
+                <input v-model="form.preco" type="number" step="0.01" min="0" placeholder="0.00" required />
+              </label>
+
+              <label>
+                <span>Data</span>
+                <input v-model="form.data" type="date" required />
+              </label>
+
+              <label>
+                <span>Status do pedido</span>
+                <select v-model="form.status" required>
+                  <option value="">Selecione</option>
+                  <option value="Pago">Pago</option>
+                  <option value="Pendente">Pendente</option>
+                  <option value="Enviado">Enviado</option>
+                  <option value="Cancelado">Cancelado</option>
+                </select>
+              </label>
+
+              <label class="full-width">
+                <span>Origem</span>
+                <select v-model="form.origem" required>
+                  <option value="">Selecione</option>
+                  <option value="Amazon">Amazon</option>
+                  <option value="Mercado Livre">Mercado Livre</option>
+                  <option value="Shopee">Shopee</option>
+                  <option value="OLX">OLX</option>
+                  <option value="Loja Própria">Loja Própria</option>
+                  <option value="Outros">Outros</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="actions">
+              <button type="submit" class="primary">{{ editId ? 'Salvar alterações' : 'Adicionar venda' }}</button>
+              <button type="button" class="secondary" v-if="editId" @click="cancelEdit">Cancelar</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="stats row">
+          <div class="stat-card accent">
+            <span>Total de vendas</span>
+            <strong>{{ dashboard.total_vendas }}</strong>
+          </div>
+          <div class="stat-card success">
+            <span>Valor total</span>
+            <strong>R$ {{ formatCurrency(dashboard.valor_total) }}</strong>
+          </div>
+        </section>
+
+        <section class="filters panel">
+          <h2>Filtros</h2>
+          <div class="grid three-columns">
+            <label>
+              <span>Pesquisa</span>
+              <input v-model="filters.q" type="text" placeholder="Produto, origem, status" />
+            </label>
+
+            <label>
+              <span>Status</span>
+              <select v-model="filters.status">
+                <option value="">Todos</option>
+                <option value="Pago">Pago</option>
+                <option value="Pendente">Pendente</option>
+                <option value="Enviado">Enviado</option>
+                <option value="Cancelado">Cancelado</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Origem</span>
+              <select v-model="filters.origem">
+                <option value="">Todas</option>
+                <option value="Amazon">Amazon</option>
+                <option value="Mercado Livre">Mercado Livre</option>
+                <option value="Shopee">Shopee</option>
+                <option value="OLX">OLX</option>
+                <option value="Loja Própria">Loja Própria</option>
+                <option value="Outros">Outros</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Data inicial</span>
+              <input v-model="filters.data_inicio" type="date" />
+            </label>
+
+            <label>
+              <span>Data final</span>
+              <input v-model="filters.data_fim" type="date" />
+            </label>
+          </div>
+          <div class="actions right-align">
+            <button class="secondary" @click="clearFilters" type="button">Limpar filtros</button>
+          </div>
+        </section>
+
+        <section class="charts row">
+          <div class="panel chart-panel">
+            <h2>Vendas por status</h2>
+            <canvas id="statusChart"></canvas>
+          </div>
+          <div class="panel chart-panel">
+            <h2>Vendas por origem</h2>
+            <canvas id="origemChart"></canvas>
+          </div>
+        </section>
+
+        <section class="panel table-panel">
+          <h2>Histórico de vendas</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th>Preço</th>
+                  <th>Data</th>
+                  <th>Status</th>
+                  <th>Origem</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="vendas.length === 0">
+                  <td colspan="6" class="empty">Nenhuma venda encontrada.</td>
+                </tr>
+                <tr v-for="venda in vendas" :key="venda.id">
+                  <td>{{ venda.produto }}</td>
+                  <td>R$ {{ formatCurrency(venda.preco) }}</td>
+                  <td>{{ formatDate(venda.data) }}</td>
+                  <td><span class="badge" :class="statusClass(venda.status)">{{ venda.status }}</span></td>
+                  <td>{{ venda.origem }}</td>
+                  <td class="actions-cell">
+                    <button class="small primary" @click="editarVenda(venda)">Editar</button>
+                    <button class="small danger" @click="excluirVenda(venda.id)">Excluir</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
